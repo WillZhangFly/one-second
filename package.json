@@ -1,0 +1,63 @@
+{
+  "name": "date-lite",
+  "version": "0.0.1",
+  "description": "Ultra-lightweight date library using native Intl API - 3KB gzipped, zero dependencies, immutable",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "date",
+    "time",
+    "datetime",
+    "format",
+    "parse",
+    "intl",
+    "lightweight",
+    "tiny",
+    "moment",
+    "dayjs",
+    "date-fns",
+    "immutable"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/willzhangfly/date-lite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/willzhangfly/date-lite/issues"
+  },
+  "homepage": "https://github.com/willzhangfly/date-lite#readme",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/willzhangfly"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0"
+  },
+  "sideEffects": false
+}
