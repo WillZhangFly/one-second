@@ -1,5 +1,5 @@
 {
-  "name": "date-lite",
+  "name": "currentjs",
   "version": "0.0.1",
   "description": "Ultra-lightweight date library using native Intl API - 3KB gzipped, zero dependencies, immutable",
   "type": "module",
@@ -35,7 +35,8 @@
     "moment",
     "dayjs",
     "date-fns",
-    "immutable"
+    "immutable",
+    "currentjs"
   ],
   "author": "",
   "license": "MIT",
