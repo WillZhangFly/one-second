@@ -1,11 +1,11 @@
-# currentjs
+# one-second
 
 > Ultra-lightweight date library using native Intl API - 2KB, zero dependencies, immutable
 
-[![npm version](https://img.shields.io/npm/v/currentjs.svg)](https://www.npmjs.com/package/currentjs)
+[![npm version](https://img.shields.io/npm/v/one-second.svg)](https://www.npmjs.com/package/one-second)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Why currentjs?
+## Why one-second?
 
 - **Tiny**: ~3KB minified (vs Moment.js 300KB, Luxon 29KB, Day.js 6KB)
 - **Zero dependencies**: Uses native `Intl.DateTimeFormat` and `Intl.RelativeTimeFormat`
@@ -17,13 +17,13 @@
 ## Installation
 
 ```bash
-npm install currentjs
+npm install one-second
 ```
 
 ## Quick Start
 
 ```typescript
-import { format, relative, addDays, isToday } from 'currentjs';
+import { format, relative, addDays, isToday } from 'one-second';
 
 // Format dates using native Intl
 format(new Date(), { month: 'long', day: 'numeric', year: 'numeric' });
@@ -42,7 +42,7 @@ isToday(new Date()); // → true
 
 ## Comparison with Alternatives
 
-| Feature | currentjs | Day.js | date-fns | Luxon | Moment.js |
+| Feature | one-second | Day.js | date-fns | Luxon | Moment.js |
 |---------|-----------|--------|----------|-------|-----------|
 | Size (gzip) | **~3KB** | 6KB | 18KB+ | 29KB | 72KB+ |
 | Dependencies | **0** | 0 | 0 | 0 | 0 |
@@ -61,7 +61,7 @@ isToday(new Date()); // → true
 ### Parsing
 
 ```typescript
-import { toDate, isValid, parse } from 'currentjs';
+import { toDate, isValid, parse } from 'one-second';
 
 toDate('2024-01-15');        // Date from string
 toDate(1705276800000);       // Date from timestamp
@@ -79,7 +79,7 @@ parse('2024-06-15 14:30', 'YYYY-MM-DD HH:mm'); // Date with time
 ### Formatting
 
 ```typescript
-import { format, formatStr, formatDate, formatDateTime, toISO, toTime } from 'currentjs';
+import { format, formatStr, formatDate, formatDateTime, toISO, toTime } from 'one-second';
 
 // Format with template string (like dayjs/moment)
 formatStr(date, 'YYYY-MM-DD');           // "2024-01-15"
@@ -115,7 +115,7 @@ toISOString(date);           // "2024-01-15T10:30:00.000Z"
 ### Relative Time
 
 ```typescript
-import { relative, timeAgo } from 'currentjs';
+import { relative, timeAgo } from 'one-second';
 
 relative(new Date(Date.now() - 60000));      // "1 minute ago"
 relative(new Date(Date.now() + 86400000));   // "in 1 day"
@@ -136,7 +136,7 @@ timeAgo(date);                               // "2 hours ago"
 All operations are **immutable** - they return a new Date.
 
 ```typescript
-import { add, subtract, addDays, addMonths, subWeeks } from 'currentjs';
+import { add, subtract, addDays, addMonths, subWeeks } from 'one-second';
 
 // Generic add/subtract
 add(date, 5, 'day');
@@ -162,7 +162,7 @@ import {
   isSameDay, isSameMonth, isSameYear,
   isToday, isYesterday, isTomorrow,
   isPast, isFuture
-} from 'currentjs';
+} from 'one-second';
 
 isBefore(date1, date2);      // true/false
 isAfter(date1, date2);       // true/false
@@ -183,7 +183,7 @@ isFuture(date);              // true/false
 ### Difference
 
 ```typescript
-import { diff, diffInDays, diffInHours, diffInMinutes } from 'currentjs';
+import { diff, diffInDays, diffInHours, diffInMinutes } from 'one-second';
 
 // Generic diff
 diff(date1, date2, 'day');
@@ -200,7 +200,7 @@ diffInYears(date1, date2);
 ### Start/End of Period
 
 ```typescript
-import { startOf, endOf } from 'currentjs';
+import { startOf, endOf } from 'one-second';
 
 startOf(date, 'day');        // Start of day (00:00:00)
 startOf(date, 'month');      // First day of month
@@ -218,7 +218,7 @@ endOf(date, 'year');         // December 31st
 import {
   getYear, getMonth, getDate, getDay,
   getHours, getMinutes, getSeconds, getTime
-} from 'currentjs';
+} from 'one-second';
 
 getYear(date);               // 2024
 getMonth(date);              // 0-11 (January = 0)
@@ -233,7 +233,7 @@ getTime(date);               // Unix timestamp
 ### Duration
 
 ```typescript
-import { duration, durationBetween } from 'currentjs';
+import { duration, durationBetween } from 'one-second';
 
 // Create duration from milliseconds
 const dur = duration(3661000);  // 1 hour, 1 min, 1 sec
@@ -264,7 +264,7 @@ import {
   daysInMonth, isLeapYear, dayOfYear, weekOfYear, quarter,
   create, now, today, clone, min, max,
   isWeekend, isWeekday, dayName, monthName
-} from 'currentjs';
+} from 'one-second';
 
 daysInMonth(date);           // 28, 29, 30, or 31
 isLeapYear(date);            // true/false
@@ -288,10 +288,10 @@ monthName(date);             // "January"
 
 ## Internationalization
 
-currentjs uses native `Intl` APIs, so all locales supported by your environment work automatically:
+one-second uses native `Intl` APIs, so all locales supported by your environment work automatically:
 
 ```typescript
-import { format, relative } from 'currentjs';
+import { format, relative } from 'one-second';
 
 // Format in different locales
 format(date, { locale: 'ja-JP', dateStyle: 'full' });
@@ -309,18 +309,18 @@ relative(date, { locale: 'ko' });  // "2시간 전"
 
 ## Performance
 
-currentjs caches `Intl.DateTimeFormat` and `Intl.RelativeTimeFormat` instances for optimal performance:
+one-second caches `Intl.DateTimeFormat` and `Intl.RelativeTimeFormat` instances for optimal performance:
 
 ```typescript
 // Formatting 1000 dates:
 // toLocaleDateString(): ~217ms (creates new formatter each time)
-// currentjs format():   ~4ms (reuses cached formatter)
+// one-second format():   ~4ms (reuses cached formatter)
 ```
 
 ## Migration from Moment.js
 
 ```typescript
-// Moment.js                          // currentjs
+// Moment.js                          // one-second
 moment()                              // new Date()
 moment('2024-01-15')                  // toDate('2024-01-15')
 moment().format('YYYY-MM-DD')         // toISO(new Date())
@@ -335,7 +335,7 @@ moment().diff(other, 'days')          // diffInDays(date, other)
 ## Migration from Day.js
 
 ```typescript
-// Day.js                             // currentjs
+// Day.js                             // one-second
 dayjs()                               // new Date()
 dayjs().format('YYYY-MM-DD')          // toISO(new Date())
 dayjs().add(7, 'day')                 // addDays(new Date(), 7)
@@ -355,7 +355,7 @@ This project is maintained in my free time. If it saved you some kilobytes and m
 
 - ⭐ Star the repo—it helps others discover this tool
 - 📢 Share with your team or on social media
-- 🐛 [Report bugs or suggest features](https://github.com/willzhangfly/date-lite/issues)
+- 🐛 [Report bugs or suggest features](https://github.com/willzhangfly/one-second/issues)
 - ☕ [Buy me a coffee](https://buymeacoffee.com/willzhangfly) if you'd like to support development
 
 Thank you to everyone who has contributed, shared feedback, or helped spread the word!

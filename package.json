@@ -1,5 +1,5 @@
 {
-  "name": "currentjs",
+  "name": "one-second",
   "version": "0.0.1",
   "description": "Ultra-lightweight date library using native Intl API - 3KB gzipped, zero dependencies, immutable",
   "type": "module",
@@ -36,18 +36,18 @@
     "dayjs",
     "date-fns",
     "immutable",
-    "currentjs"
+    "one-second"
   ],
   "author": "",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/willzhangfly/date-lite.git"
+    "url": "git+https://github.com/willzhangfly/one-second.git"
   },
   "bugs": {
-    "url": "https://github.com/willzhangfly/date-lite/issues"
+    "url": "https://github.com/willzhangfly/one-second/issues"
   },
-  "homepage": "https://github.com/willzhangfly/date-lite#readme",
+  "homepage": "https://github.com/willzhangfly/one-second#readme",
   "funding": {
     "type": "buymeacoffee",
     "url": "https://buymeacoffee.com/willzhangfly"
