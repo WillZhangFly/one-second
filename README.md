@@ -50,6 +50,7 @@ isToday(new Date()); // → true
 | Tree-shakeable | **Yes** | Plugin | Yes | Partial | No |
 | Native Intl | **Yes** | Partial | Partial | Yes | No |
 | i18n (built-in) | **Yes** | Plugin | Yes | Yes | Plugin |
+| Timezone | **Yes** | Plugin | Yes | Yes | Plugin |
 | Format strings | **Yes** | Yes | No | No | Yes |
 | Parse w/ format | **Yes** | Plugin | Yes | No | Yes |
 | Duration | **Yes** | Plugin | Yes | Yes | Yes |
@@ -284,6 +285,72 @@ isWeekend(date);             // true if Sat/Sun
 isWeekday(date);             // true if Mon-Fri
 dayName(date);               // "Monday"
 monthName(date);             // "January"
+```
+
+## Timezone Support
+
+Built-in timezone support using native `Intl` - no moment-timezone needed!
+
+```typescript
+import {
+  formatInTz, formatStrInTz, toTimezone,
+  getTimezoneAbbr, getTimezoneName, tzOffset,
+  guessTimezone, isValidTimezone, listTimezones,
+  TIMEZONES
+} from 'one-second';
+
+// Format in specific timezone
+formatInTz(new Date(), 'America/New_York', { dateStyle: 'full', timeStyle: 'long' });
+// → "Wednesday, February 5, 2025 at 11:30:00 AM EST"
+
+// Format with template in timezone
+formatStrInTz(new Date(), 'YYYY-MM-DD HH:mm z', 'Asia/Tokyo');
+// → "2025-02-06 01:30 JST"
+
+// Get timezone info
+getTimezoneAbbr(new Date(), 'America/Los_Angeles');  // "PST"
+getTimezoneName(new Date(), 'Europe/Paris');         // "Central European Standard Time"
+getTimezoneOffsetStr(new Date(), 'Asia/Shanghai');   // "+08:00"
+
+// Get date parts in timezone
+const tokyo = toTimezone(new Date(), 'Asia/Tokyo');
+// { year: 2025, month: 1, day: 6, hours: 1, minutes: 30, ... }
+
+// Get offset in minutes
+tzOffset(new Date(), 'America/New_York');  // -300 (EST = UTC-5)
+
+// Detect user's timezone
+guessTimezone();  // "America/Los_Angeles"
+
+// Validate timezone
+isValidTimezone('America/New_York');  // true
+isValidTimezone('Invalid/Zone');      // false
+
+// List all common timezones with current offsets
+listTimezones();
+// [
+//   { id: 'Pacific/Honolulu', name: 'Honolulu', abbr: 'HST', offset: '-10:00' },
+//   { id: 'America/Los_Angeles', name: 'Pacific Time (US)', abbr: 'PST', offset: '-08:00' },
+//   ...
+// ]
+
+// Common timezone constants
+TIMEZONES['America/New_York'];  // "Eastern Time (US)"
+TIMEZONES['Asia/Tokyo'];        // "Tokyo"
+```
+
+### Timezone Tokens
+
+When using `formatStrInTz`, additional tokens are available:
+
+| Token | Output | Example |
+|-------|--------|---------|
+| `z` | Timezone abbreviation | PST, EST, JST |
+| `Z` | Timezone offset | +08:00, -05:00 |
+
+```typescript
+formatStrInTz(date, 'HH:mm z (Z)', 'America/New_York');
+// → "14:30 EST (-05:00)"
 ```
 
 ## Internationalization
