@@ -69,6 +69,74 @@ function getFormatter(options: FormatOptions): Intl.DateTimeFormat {
   return formatter;
 }
 
+// Cache for locale-aware month/day names (for bi-directional parsing)
+const monthNamesCache = new Map<string, { long: Map<string, number>; short: Map<string, number> }>();
+const dayNamesCache = new Map<string, { long: Map<string, number>; short: Map<string, number> }>();
+
+function getMonthNamesMap(locale: string): { long: Map<string, number>; short: Map<string, number> } {
+  let cached = monthNamesCache.get(locale);
+  if (!cached) {
+    const longMap = new Map<string, number>();
+    const shortMap = new Map<string, number>();
+    for (let m = 0; m < 12; m++) {
+      const date = new Date(2024, m, 15);
+      const longName = new Intl.DateTimeFormat(locale, { month: 'long' }).format(date).toLowerCase();
+      const shortName = new Intl.DateTimeFormat(locale, { month: 'short' }).format(date).toLowerCase();
+      longMap.set(longName, m);
+      shortMap.set(shortName, m);
+    }
+    cached = { long: longMap, short: shortMap };
+    monthNamesCache.set(locale, cached);
+  }
+  return cached;
+}
+
+function getDayNamesMap(locale: string): { long: Map<string, number>; short: Map<string, number> } {
+  let cached = dayNamesCache.get(locale);
+  if (!cached) {
+    const longMap = new Map<string, number>();
+    const shortMap = new Map<string, number>();
+    // Jan 7, 2024 is a Sunday (day 0)
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(2024, 0, 7 + d);
+      const longName = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(date).toLowerCase();
+      const shortName = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date).toLowerCase();
+      longMap.set(longName, d);
+      shortMap.set(shortName, d);
+    }
+    cached = { long: longMap, short: shortMap };
+    dayNamesCache.set(locale, cached);
+  }
+  return cached;
+}
+
+function buildMonthRegex(locale: string, style: 'long' | 'short'): string {
+  const names: string[] = [];
+  for (let m = 0; m < 12; m++) {
+    const date = new Date(2024, m, 15);
+    const name = new Intl.DateTimeFormat(locale, { month: style }).format(date);
+    names.push(name);
+  }
+  // Sort by length (longest first) and escape regex chars
+  return '(' + names
+    .sort((a, b) => b.length - a.length)
+    .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|') + ')';
+}
+
+function buildDayRegex(locale: string, style: 'long' | 'short'): string {
+  const names: string[] = [];
+  for (let d = 0; d < 7; d++) {
+    const date = new Date(2024, 0, 7 + d);
+    const name = new Intl.DateTimeFormat(locale, { weekday: style }).format(date);
+    names.push(name);
+  }
+  return '(' + names
+    .sort((a, b) => b.length - a.length)
+    .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|') + ')';
+}
+
 /**
  * Format date using Intl.DateTimeFormat
  */
@@ -162,31 +230,46 @@ export function formatStr(input: DateInput, template: string, locale = 'en-US'):
 }
 
 /**
- * Parse date from string with format
- * Tokens: YYYY, MM, DD, HH, mm, ss
+ * Parse date from string with format (bi-directional parsing)
+ * Tokens: YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd, HH, H, hh, h, mm, m, ss, s, SSS, A, a
+ * Supports locale-aware month/day names (e.g., "January", "Jan", "Monday", "Mon")
  */
-export function parse(dateStr: string, template: string): Date {
-  const tokenDefs: Array<{ token: string; regex: string; field: string; transform?: (v: number) => number }> = [
-    { token: 'YYYY', regex: '(\\d{4})', field: 'year' },
-    { token: 'YY', regex: '(\\d{2})', field: 'year', transform: (v) => 2000 + v },
-    { token: 'MM', regex: '(\\d{2})', field: 'month', transform: (v) => v - 1 },
-    { token: 'M', regex: '(\\d{1,2})', field: 'month', transform: (v) => v - 1 },
-    { token: 'DD', regex: '(\\d{2})', field: 'day' },
-    { token: 'D', regex: '(\\d{1,2})', field: 'day' },
-    { token: 'HH', regex: '(\\d{2})', field: 'hour' },
-    { token: 'H', regex: '(\\d{1,2})', field: 'hour' },
-    { token: 'mm', regex: '(\\d{2})', field: 'minute' },
-    { token: 'm', regex: '(\\d{1,2})', field: 'minute' },
-    { token: 'ss', regex: '(\\d{2})', field: 'second' },
-    { token: 's', regex: '(\\d{1,2})', field: 'second' },
-    { token: 'SSS', regex: '(\\d{3})', field: 'ms' },
+export function parse(dateStr: string, template: string, locale = 'en-US'): Date {
+  // Build locale-aware token definitions
+  type TokenDef = { token: string; regex: string; field: string; transform?: (v: string, locale: string) => number };
+
+  const monthNames = getMonthNamesMap(locale);
+  const dayNames = getDayNamesMap(locale);
+
+  const tokenDefs: TokenDef[] = [
+    { token: 'YYYY', regex: '(\\d{4})', field: 'year', transform: (v) => parseInt(v, 10) },
+    { token: 'YY', regex: '(\\d{2})', field: 'year', transform: (v) => 2000 + parseInt(v, 10) },
+    { token: 'MMMM', regex: buildMonthRegex(locale, 'long'), field: 'month', transform: (v, loc) => getMonthNamesMap(loc).long.get(v.toLowerCase()) ?? 0 },
+    { token: 'MMM', regex: buildMonthRegex(locale, 'short'), field: 'month', transform: (v, loc) => getMonthNamesMap(loc).short.get(v.toLowerCase()) ?? 0 },
+    { token: 'MM', regex: '(\\d{2})', field: 'month', transform: (v) => parseInt(v, 10) - 1 },
+    { token: 'M', regex: '(\\d{1,2})', field: 'month', transform: (v) => parseInt(v, 10) - 1 },
+    { token: 'dddd', regex: buildDayRegex(locale, 'long'), field: 'weekday', transform: (v, loc) => getDayNamesMap(loc).long.get(v.toLowerCase()) ?? 0 },
+    { token: 'ddd', regex: buildDayRegex(locale, 'short'), field: 'weekday', transform: (v, loc) => getDayNamesMap(loc).short.get(v.toLowerCase()) ?? 0 },
+    { token: 'DD', regex: '(\\d{2})', field: 'day', transform: (v) => parseInt(v, 10) },
+    { token: 'D', regex: '(\\d{1,2})', field: 'day', transform: (v) => parseInt(v, 10) },
+    { token: 'HH', regex: '(\\d{2})', field: 'hour', transform: (v) => parseInt(v, 10) },
+    { token: 'H', regex: '(\\d{1,2})', field: 'hour', transform: (v) => parseInt(v, 10) },
+    { token: 'hh', regex: '(\\d{2})', field: 'hour12', transform: (v) => parseInt(v, 10) },
+    { token: 'h', regex: '(\\d{1,2})', field: 'hour12', transform: (v) => parseInt(v, 10) },
+    { token: 'mm', regex: '(\\d{2})', field: 'minute', transform: (v) => parseInt(v, 10) },
+    { token: 'm', regex: '(\\d{1,2})', field: 'minute', transform: (v) => parseInt(v, 10) },
+    { token: 'ss', regex: '(\\d{2})', field: 'second', transform: (v) => parseInt(v, 10) },
+    { token: 's', regex: '(\\d{1,2})', field: 'second', transform: (v) => parseInt(v, 10) },
+    { token: 'SSS', regex: '(\\d{3})', field: 'ms', transform: (v) => parseInt(v, 10) },
+    { token: 'A', regex: '(AM|PM)', field: 'meridiem', transform: (v) => v === 'PM' ? 1 : 0 },
+    { token: 'a', regex: '(am|pm)', field: 'meridiem', transform: (v) => v === 'pm' ? 1 : 0 },
   ];
 
   // Sort by token length (longest first) to avoid partial matches
   const sortedDefs = [...tokenDefs].sort((a, b) => b.token.length - a.token.length);
 
   // Find which tokens are in the template and their positions
-  const foundTokens: Array<{ pos: number; def: typeof tokenDefs[0] }> = [];
+  const foundTokens: Array<{ pos: number; def: TokenDef }> = [];
   let searchTemplate = template;
 
   for (const def of sortedDefs) {
@@ -204,16 +287,23 @@ export function parse(dateStr: string, template: string): Date {
 
   // Build regex pattern
   let pattern = template;
-  // Escape special regex chars first
-  pattern = pattern.replace(/[.*+?^${}|[\]\\]/g, '\\$&');
+  // Escape special regex chars first (but preserve token placeholders)
+  const tokenPositions = foundTokens.map(t => ({ start: t.pos, end: t.pos + t.def.token.length, def: t.def }));
 
-  // Replace tokens with their regex patterns (in reverse order to maintain positions)
-  for (const { def } of [...foundTokens].reverse().sort((a, b) => b.pos - a.pos)) {
-    const escaped = def.token.replace(/[.*+?^${}|[\]\\]/g, '\\$&');
-    pattern = pattern.replace(escaped, def.regex);
+  // Replace tokens with their regex patterns
+  for (const { def } of [...foundTokens].sort((a, b) => b.pos - a.pos)) {
+    pattern = pattern.replace(def.token, def.regex);
   }
 
-  const regex = new RegExp('^' + pattern + '$');
+  // Escape remaining special chars (not in token regexes)
+  // Actually, we need a different approach - escape first, then replace
+  let escapedTemplate = template.replace(/[.*+?^${}|[\]\\]/g, '\\$&');
+  for (const { def } of [...foundTokens].sort((a, b) => b.pos - a.pos)) {
+    const escapedToken = def.token.replace(/[.*+?^${}|[\]\\]/g, '\\$&');
+    escapedTemplate = escapedTemplate.replace(escapedToken, def.regex);
+  }
+
+  const regex = new RegExp('^' + escapedTemplate + '$', 'i');
   const match = dateStr.match(regex);
 
   if (!match) {
@@ -225,22 +315,36 @@ export function parse(dateStr: string, template: string): Date {
     month: 0,
     day: 1,
     hour: 0,
+    hour12: 0,
     minute: 0,
     second: 0,
     ms: 0,
+    meridiem: -1, // -1 = not set
+    weekday: -1,  // -1 = not set (weekday is informational only)
   };
 
   // Apply matches in order
   for (let i = 0; i < foundTokens.length; i++) {
     const { def } = foundTokens[i];
-    let value = parseInt(match[i + 1], 10);
-    if (def.transform) {
-      value = def.transform(value);
-    }
+    const rawValue = match[i + 1];
+    const value = def.transform ? def.transform(rawValue, locale) : parseInt(rawValue, 10);
     parts[def.field] = value;
   }
 
-  return new Date(parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second, parts.ms);
+  // Handle 12-hour format with meridiem
+  let hour = parts.hour;
+  if (parts.hour12 > 0 && parts.meridiem >= 0) {
+    hour = parts.hour12;
+    if (parts.meridiem === 1 && hour !== 12) {
+      hour += 12;
+    } else if (parts.meridiem === 0 && hour === 12) {
+      hour = 0;
+    }
+  } else if (parts.hour12 > 0) {
+    hour = parts.hour12;
+  }
+
+  return new Date(parts.year, parts.month, parts.day, hour, parts.minute, parts.second, parts.ms);
 }
 
 // Preset formats
@@ -324,10 +428,23 @@ export function add(input: DateInput, amount: number, unit: Unit): Date {
   const d = toDate(input);
 
   switch (unit) {
-    case 'year':
-      return new Date(d.getFullYear() + amount, d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
-    case 'month':
-      return new Date(d.getFullYear(), d.getMonth() + amount, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+    case 'year': {
+      // Handle edge case: Feb 29 + 1 year in non-leap year → Feb 28
+      const targetYear = d.getFullYear() + amount;
+      const targetMonth = d.getMonth();
+      const maxDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const targetDay = Math.min(d.getDate(), maxDay);
+      return new Date(targetYear, targetMonth, targetDay, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+    }
+    case 'month': {
+      // Handle edge case: Jan 31 + 1 month → Feb 28/29 (not Mar 2/3)
+      const targetMonth = d.getMonth() + amount;
+      const result = new Date(d.getFullYear(), targetMonth, 1, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+      const maxDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+      const targetDay = Math.min(d.getDate(), maxDay);
+      result.setDate(targetDay);
+      return result;
+    }
     case 'week':
       return new Date(d.getTime() + amount * 7 * 24 * 60 * 60 * 1000);
     case 'day':
@@ -1119,4 +1236,405 @@ export function nowInTz(timezone: string, options: Omit<FormatOptions, 'timeZone
  */
 export function sameInstant(a: DateInput, b: DateInput): boolean {
   return toDate(a).getTime() === toDate(b).getTime();
+}
+
+// ============================================
+// Business Day Support
+// ============================================
+
+export interface BusinessDayOptions {
+  weekendDays?: number[];  // Default: [0, 6] (Sunday, Saturday)
+  holidays?: DateInput[];  // Specific dates to exclude
+}
+
+/**
+ * Check if a date is a business day
+ */
+export function isBusinessDay(input: DateInput, options: BusinessDayOptions = {}): boolean {
+  const d = toDate(input);
+  const weekendDays = options.weekendDays ?? [0, 6];
+  const holidays = options.holidays ?? [];
+
+  // Check if it's a weekend
+  if (weekendDays.includes(d.getDay())) {
+    return false;
+  }
+
+  // Check if it's a holiday
+  for (const holiday of holidays) {
+    if (isSameDay(d, holiday)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Get the next business day
+ */
+export function nextBusinessDay(input: DateInput, options: BusinessDayOptions = {}): Date {
+  let d = addDays(input, 1);
+  while (!isBusinessDay(d, options)) {
+    d = addDays(d, 1);
+  }
+  return d;
+}
+
+/**
+ * Get the previous business day
+ */
+export function prevBusinessDay(input: DateInput, options: BusinessDayOptions = {}): Date {
+  let d = subDays(input, 1);
+  while (!isBusinessDay(d, options)) {
+    d = subDays(d, 1);
+  }
+  return d;
+}
+
+/**
+ * Add business days to a date
+ */
+export function addBusinessDays(input: DateInput, days: number, options: BusinessDayOptions = {}): Date {
+  let d = toDate(input);
+  let remaining = Math.abs(days);
+  const direction = days >= 0 ? 1 : -1;
+
+  while (remaining > 0) {
+    d = addDays(d, direction);
+    if (isBusinessDay(d, options)) {
+      remaining--;
+    }
+  }
+
+  return d;
+}
+
+/**
+ * Subtract business days from a date
+ */
+export function subBusinessDays(input: DateInput, days: number, options: BusinessDayOptions = {}): Date {
+  return addBusinessDays(input, -days, options);
+}
+
+/**
+ * Get the number of business days between two dates
+ */
+export function diffInBusinessDays(a: DateInput, b: DateInput, options: BusinessDayOptions = {}): number {
+  const start = toDate(a);
+  const end = toDate(b);
+  const direction = start <= end ? 1 : -1;
+
+  let current = start;
+  let count = 0;
+
+  while ((direction === 1 && current < end) || (direction === -1 && current > end)) {
+    current = addDays(current, direction);
+    if (isBusinessDay(current, options)) {
+      count++;
+    }
+  }
+
+  return count * direction;
+}
+
+// ============================================
+// Date Ranges / Intervals
+// ============================================
+
+export interface Interval {
+  start: Date;
+  end: Date;
+  contains(date: DateInput): boolean;
+  overlaps(other: Interval): boolean;
+  eachDay(): Generator<Date>;
+  eachWeek(): Generator<Date>;
+  eachMonth(): Generator<Date>;
+  duration(): Duration;
+  days(): number;
+  isValid(): boolean;
+}
+
+/**
+ * Create an interval between two dates
+ */
+export function interval(start: DateInput, end: DateInput): Interval {
+  const s = toDate(start);
+  const e = toDate(end);
+
+  return {
+    start: s,
+    end: e,
+
+    contains(date: DateInput): boolean {
+      return isBetween(date, s, e);
+    },
+
+    overlaps(other: Interval): boolean {
+      return s <= other.end && e >= other.start;
+    },
+
+    *eachDay(): Generator<Date> {
+      let current = startOf(s, 'day');
+      const endDay = startOf(e, 'day');
+      while (current <= endDay) {
+        yield new Date(current);
+        current = addDays(current, 1);
+      }
+    },
+
+    *eachWeek(): Generator<Date> {
+      let current = startOf(s, 'week');
+      const endWeek = startOf(e, 'week');
+      while (current <= endWeek) {
+        yield new Date(current);
+        current = addWeeks(current, 1);
+      }
+    },
+
+    *eachMonth(): Generator<Date> {
+      let current = startOf(s, 'month');
+      const endMonth = startOf(e, 'month');
+      while (current <= endMonth) {
+        yield new Date(current);
+        current = addMonths(current, 1);
+      }
+    },
+
+    duration(): Duration {
+      return durationBetween(s, e);
+    },
+
+    days(): number {
+      return diffInDays(e, s);
+    },
+
+    isValid(): boolean {
+      return isValid(s) && isValid(e) && s <= e;
+    },
+  };
+}
+
+/**
+ * Check if two intervals overlap
+ */
+export function areIntervalsOverlapping(a: Interval, b: Interval): boolean {
+  return a.overlaps(b);
+}
+
+/**
+ * Check if a date is within an interval
+ */
+export function isWithinInterval(date: DateInput, int: Interval): boolean {
+  return int.contains(date);
+}
+
+/**
+ * Get all days in an interval as an array
+ */
+export function eachDayOfInterval(int: Interval): Date[] {
+  return [...int.eachDay()];
+}
+
+/**
+ * Get all weeks in an interval as an array
+ */
+export function eachWeekOfInterval(int: Interval): Date[] {
+  return [...int.eachWeek()];
+}
+
+/**
+ * Get all months in an interval as an array
+ */
+export function eachMonthOfInterval(int: Interval): Date[] {
+  return [...int.eachMonth()];
+}
+
+// ============================================
+// Chainable Wrapper
+// ============================================
+
+export interface DateWrapper {
+  /** Get the underlying Date object */
+  date(): Date;
+  /** Get the timestamp */
+  valueOf(): number;
+
+  // Formatting
+  format(template: string, locale?: string): string;
+  toISO(): string;
+  toISOString(): string;
+  toTime(): string;
+  relative(options?: RelativeTimeOptions): string;
+  formatDate(locale?: string): string;
+  formatDateTime(locale?: string): string;
+  formatTime(locale?: string): string;
+
+  // Arithmetic (return new DateWrapper)
+  add(amount: number, unit: Unit): DateWrapper;
+  subtract(amount: number, unit: Unit): DateWrapper;
+  addYears(n: number): DateWrapper;
+  addMonths(n: number): DateWrapper;
+  addWeeks(n: number): DateWrapper;
+  addDays(n: number): DateWrapper;
+  addHours(n: number): DateWrapper;
+  addMinutes(n: number): DateWrapper;
+  addSeconds(n: number): DateWrapper;
+  subYears(n: number): DateWrapper;
+  subMonths(n: number): DateWrapper;
+  subWeeks(n: number): DateWrapper;
+  subDays(n: number): DateWrapper;
+  subHours(n: number): DateWrapper;
+  subMinutes(n: number): DateWrapper;
+  subSeconds(n: number): DateWrapper;
+
+  // Period boundaries
+  startOf(unit: 'year' | 'month' | 'week' | 'day' | 'hour' | 'minute'): DateWrapper;
+  endOf(unit: 'year' | 'month' | 'week' | 'day' | 'hour' | 'minute'): DateWrapper;
+
+  // Comparisons
+  isBefore(other: DateInput): boolean;
+  isAfter(other: DateInput): boolean;
+  isSameDay(other: DateInput): boolean;
+  isSameMonth(other: DateInput): boolean;
+  isSameYear(other: DateInput): boolean;
+  isBetween(start: DateInput, end: DateInput): boolean;
+  isToday(): boolean;
+  isYesterday(): boolean;
+  isTomorrow(): boolean;
+  isPast(): boolean;
+  isFuture(): boolean;
+  isWeekend(): boolean;
+  isWeekday(): boolean;
+  isValid(): boolean;
+
+  // Getters
+  year(): number;
+  month(): number;
+  day(): number;
+  weekday(): number;
+  hours(): number;
+  minutes(): number;
+  seconds(): number;
+  milliseconds(): number;
+  timestamp(): number;
+  dayOfYear(): number;
+  weekOfYear(): number;
+  quarter(): number;
+  daysInMonth(): number;
+  isLeapYear(): boolean;
+
+  // Difference
+  diff(other: DateInput, unit: Unit): number;
+  diffInDays(other: DateInput): number;
+  diffInHours(other: DateInput): number;
+  diffInMinutes(other: DateInput): number;
+  diffInMonths(other: DateInput): number;
+  diffInYears(other: DateInput): number;
+
+  // Business days
+  addBusinessDays(n: number, options?: BusinessDayOptions): DateWrapper;
+  subBusinessDays(n: number, options?: BusinessDayOptions): DateWrapper;
+  isBusinessDay(options?: BusinessDayOptions): boolean;
+  nextBusinessDay(options?: BusinessDayOptions): DateWrapper;
+  prevBusinessDay(options?: BusinessDayOptions): DateWrapper;
+
+  // Clone
+  clone(): DateWrapper;
+}
+
+/**
+ * Create a chainable date wrapper (Day.js-like API)
+ */
+export function d(input?: DateInput): DateWrapper {
+  const date = input ? toDate(input) : new Date();
+
+  const wrapper: DateWrapper = {
+    date: () => new Date(date.getTime()),
+    valueOf: () => date.getTime(),
+
+    // Formatting
+    format: (template: string, locale?: string) => formatStr(date, template, locale),
+    toISO: () => toISO(date),
+    toISOString: () => toISOString(date),
+    toTime: () => toTime(date),
+    relative: (options?: RelativeTimeOptions) => relative(date, options),
+    formatDate: (locale?: string) => formatDate(date, locale),
+    formatDateTime: (locale?: string) => formatDateTime(date, locale),
+    formatTime: (locale?: string) => formatTime(date, locale),
+
+    // Arithmetic
+    add: (amount: number, unit: Unit) => d(add(date, amount, unit)),
+    subtract: (amount: number, unit: Unit) => d(subtract(date, amount, unit)),
+    addYears: (n: number) => d(addYears(date, n)),
+    addMonths: (n: number) => d(addMonths(date, n)),
+    addWeeks: (n: number) => d(addWeeks(date, n)),
+    addDays: (n: number) => d(addDays(date, n)),
+    addHours: (n: number) => d(addHours(date, n)),
+    addMinutes: (n: number) => d(addMinutes(date, n)),
+    addSeconds: (n: number) => d(addSeconds(date, n)),
+    subYears: (n: number) => d(subYears(date, n)),
+    subMonths: (n: number) => d(subMonths(date, n)),
+    subWeeks: (n: number) => d(subWeeks(date, n)),
+    subDays: (n: number) => d(subDays(date, n)),
+    subHours: (n: number) => d(subHours(date, n)),
+    subMinutes: (n: number) => d(subMinutes(date, n)),
+    subSeconds: (n: number) => d(subSeconds(date, n)),
+
+    // Period boundaries
+    startOf: (unit) => d(startOf(date, unit)),
+    endOf: (unit) => d(endOf(date, unit)),
+
+    // Comparisons
+    isBefore: (other: DateInput) => isBefore(date, other),
+    isAfter: (other: DateInput) => isAfter(date, other),
+    isSameDay: (other: DateInput) => isSameDay(date, other),
+    isSameMonth: (other: DateInput) => isSameMonth(date, other),
+    isSameYear: (other: DateInput) => isSameYear(date, other),
+    isBetween: (start: DateInput, end: DateInput) => isBetween(date, start, end),
+    isToday: () => isToday(date),
+    isYesterday: () => isYesterday(date),
+    isTomorrow: () => isTomorrow(date),
+    isPast: () => isPast(date),
+    isFuture: () => isFuture(date),
+    isWeekend: () => isWeekend(date),
+    isWeekday: () => isWeekday(date),
+    isValid: () => isValid(date),
+
+    // Getters
+    year: () => getYear(date),
+    month: () => getMonth(date),
+    day: () => getDate(date),
+    weekday: () => getDay(date),
+    hours: () => getHours(date),
+    minutes: () => getMinutes(date),
+    seconds: () => getSeconds(date),
+    milliseconds: () => getMilliseconds(date),
+    timestamp: () => getTime(date),
+    dayOfYear: () => dayOfYear(date),
+    weekOfYear: () => weekOfYear(date),
+    quarter: () => quarter(date),
+    daysInMonth: () => daysInMonth(date),
+    isLeapYear: () => isLeapYear(date),
+
+    // Difference
+    diff: (other: DateInput, unit: Unit) => diff(date, other, unit),
+    diffInDays: (other: DateInput) => diffInDays(date, other),
+    diffInHours: (other: DateInput) => diffInHours(date, other),
+    diffInMinutes: (other: DateInput) => diffInMinutes(date, other),
+    diffInMonths: (other: DateInput) => diffInMonths(date, other),
+    diffInYears: (other: DateInput) => diffInYears(date, other),
+
+    // Business days
+    addBusinessDays: (n: number, options?: BusinessDayOptions) => d(addBusinessDays(date, n, options)),
+    subBusinessDays: (n: number, options?: BusinessDayOptions) => d(subBusinessDays(date, n, options)),
+    isBusinessDay: (options?: BusinessDayOptions) => isBusinessDay(date, options),
+    nextBusinessDay: (options?: BusinessDayOptions) => d(nextBusinessDay(date, options)),
+    prevBusinessDay: (options?: BusinessDayOptions) => d(prevBusinessDay(date, options)),
+
+    // Clone
+    clone: () => d(date),
+  };
+
+  return wrapper;
 }
